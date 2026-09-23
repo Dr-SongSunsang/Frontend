@@ -1,0 +1,35 @@
+language: "ko-KR"
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  review_details: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 5
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "[skip review]"
+
+  path_instructions:
+    - path: "src/**/*.{ts,tsx}"
+      instructions: |
+        React와 TypeScript의 타입 안정성, 컴포넌트 책임 분리, 접근성을 확인해주세요.
+        사용자 동작과 라우팅 변경에서 발생할 수 있는 회귀를 우선 검토해주세요.
+    - path: "src/**/*.css"
+      instructions: |
+        모바일 우선 반응형 레이아웃과 키보드 포커스 상태를 확인해주세요.
+        색상은 src/styles/tokens.css의 semantic token을 우선 사용해야 합니다.
+    - path: "src/styles/tokens.css"
+      instructions: |
+        Figma 디자인 시스템의 원본 팔레트와 semantic token 간 매핑이 일관적인지 확인해주세요.
+
+chat:
+  auto_reply: true
