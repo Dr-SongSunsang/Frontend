@@ -1,4 +1,6 @@
 :root {
+  --font-family-base: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
   /* Brand palette: names mirror the Figma design system. */
   --color-green-100: #64947c;
   --color-green-70: #93b4a3;
@@ -6,7 +8,7 @@
   --color-green-30: #d0dfd8;
   --color-green-10: #eff4f2;
 
-  --color-black-100: #111111;
+  --color-black-100: #484345;
   --color-black-70: #585858;
   --color-black-50: #888888;
   --color-black-30: #b8b8b8;
