@@ -8,15 +8,17 @@ type IconName = 'chart' | 'chevron' | 'heart' | 'home' | 'play' | 'stretch'
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
-    chart: <><path d="M5 19V10M12 19V5M19 19v-7" /><path d="M3 21h18" /></>,
+    chart: <path d="M5 0H3C1.34 0 0 1.23 0 2.75v14.44c0 1.52 1.34 2.75 3 2.75h18c1.66 0 3-1.23 3-2.75V2.75C24 1.23 22.66 0 21 0h-2v1.38c0 1.9-1.68 3.43-3.75 3.43h-6.5C6.68 4.81 5 3.28 5 1.38V0Zm10 8.94c0-.76.67-1.38 1.5-1.38S18 8.18 18 8.94v6.87c0 .76-.67 1.38-1.5 1.38s-1.5-.62-1.5-1.38V8.94Zm-9 4.12c.83 0 1.5.62 1.5 1.38v1.37c0 .76-.67 1.38-1.5 1.38s-1.5-.62-1.5-1.38v-1.37c0-.76.67-1.38 1.5-1.38Zm6-1.37v4.12c0 .76-.67 1.38-1.5 1.38S9 16.57 9 15.81v-4.12c0-.76.67-1.38 1.5-1.38s1.5.62 1.5 1.38Z" />,
     chevron: <path d="m9 18 6-6-6-6" />,
     heart: <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5a5.5 5.5 0 0 0 1-8.9Z" />,
-    home: <><path d="m3 11 9-8 9 8" /><path d="M5 10v11h14V10M9 21v-7h6v7" /></>,
+    home: <path d="M0 24V8L12 0l12 8v16h-9v-9.33H9V24H0Z" />,
     play: <path d="m9 7 8 5-8 5Z" />,
     stretch: <><circle cx="12" cy="5" r="2" /><path d="m9 21 2-7-3-3M15 21l-2-7 3-4M5 8l3 3 4-3 4 2 3-3" /></>,
   }
 
-  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>
+  const filledIcons: IconName[] = ['chart', 'heart', 'home']
+
+  return <svg className={filledIcons.includes(name) ? 'icon--filled' : undefined} viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>
 }
 
 function Splash({ onEnter }: { onEnter: () => void }) {
