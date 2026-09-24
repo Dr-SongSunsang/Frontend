@@ -1,0 +1,40 @@
+:root {
+  /* Brand palette: names mirror the Figma design system. */
+  --color-green-100: #64947c;
+  --color-green-70: #93b4a3;
+  --color-green-50: #b1c9bd;
+  --color-green-30: #d0dfd8;
+  --color-green-10: #eff4f2;
+
+  --color-black-100: #111111;
+  --color-black-70: #585858;
+  --color-black-50: #888888;
+  --color-black-30: #b8b8b8;
+  --color-black-10: #e7e7e7;
+
+  --color-brown: #4c3a24;
+  --color-white: #ffffff;
+
+  /* Semantic tokens: use these in components. */
+  --color-primary: var(--color-green-100);
+  --color-primary-hover: var(--color-green-70);
+  --color-primary-soft: var(--color-green-30);
+  --color-primary-subtle: var(--color-green-10);
+  --color-accent: var(--color-brown);
+
+  --color-text-strong: var(--color-black-100);
+  --color-text: var(--color-black-70);
+  --color-text-muted: var(--color-black-50);
+  --color-text-disabled: var(--color-black-30);
+  --color-text-inverse: var(--color-white);
+
+  --color-background: var(--color-white);
+  --color-surface: var(--color-white);
+  --color-surface-subtle: var(--color-green-10);
+  --color-border: var(--color-black-10);
+  --color-border-brand: var(--color-green-30);
+
+  --shadow-color: rgb(17 17 17 / 10%);
+  --shadow-color-brand: rgb(100 148 124 / 18%);
+  --focus-ring: rgb(100 148 124 / 45%);
+}
