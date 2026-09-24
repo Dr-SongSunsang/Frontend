@@ -1,3 +1,12 @@
+---
+name: Issue template
+about: 이슈 템플릿
+title: ''
+labels: ''
+assignees: yeverycode
+
+---
+
 ## 작업 내용
 
 해야 할 작업과 목적을 작성해주세요.
