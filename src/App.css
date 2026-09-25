@@ -4,6 +4,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 button { border: 0; }
 svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .icon--filled { fill: currentColor; stroke: none; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .app { min-height: 100svh; color: var(--color-text); background: var(--color-primary-subtle); }
 
 .splash { position: fixed; z-index: 100; inset: 0; min-height: 100svh; display: grid; place-items: center; overflow: hidden; background: var(--color-primary-subtle); animation: fade-in .4s ease both; }
@@ -36,6 +37,16 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .routine-card p { margin: 10px 0 4px; overflow: hidden; color: var(--color-text-strong); font-size: 12px; line-height: 1.35; white-space: nowrap; text-overflow: ellipsis; }
 .routine-card small { display: flex; align-items: center; gap: 4px; color: var(--color-text); font-size: 9px; }
 .routine-card small span { width: 9px; height: 9px; border: 1px solid var(--color-green-70); border-radius: 50%; }
+.routine-card--loading { min-height: 190px; pointer-events: none; }
+.routine-card--loading > span { display: block; border-radius: 4px; background: linear-gradient(90deg, var(--color-primary-subtle), var(--color-white), var(--color-primary-subtle)); background-size: 220% 100%; animation: shimmer 1.2s ease-in-out infinite; }
+.routine-card--loading .routine-card__thumb { width: 202px; height: 142px; }
+.routine-card--loading .routine-card__line { width: 76%; height: 14px; margin-top: 10px; }
+.routine-card--loading .routine-card__meta { width: 52%; height: 10px; margin-top: 8px; }
+.routine-feedback { margin: 0 20px 8px 0; padding: 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--color-danger-border); border-radius: 8px; background: var(--color-danger-subtle); }
+.routine-feedback p { margin: 0; color: var(--color-text); font-size: 12px; line-height: 1.5; }
+.routine-feedback button { min-height: 36px; padding: 0 12px; display: flex; align-items: center; gap: 6px; border-radius: 8px; color: var(--color-text-inverse); background: var(--color-danger); font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.routine-feedback svg { width: 16px; height: 16px; }
+.routine-empty { margin: 0 20px 8px 0; padding: 18px; border: 1px dashed var(--color-border-brand); border-radius: 8px; color: var(--color-text-muted); background: var(--color-primary-subtle); font-size: 12px; line-height: 1.5; text-align: center; }
 
 .bottom-nav { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; height: calc(72px + env(safe-area-inset-bottom)); padding: 7px 10px calc(8px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; border-top: 1px solid var(--color-border); background: rgb(255 255 255 / 96%); box-shadow: 0 -1px 8px rgb(0 0 0 / 12%); backdrop-filter: blur(14px); }
 .bottom-nav > a { min-width: 0; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 8px; color: var(--color-text-muted); font-size: 11px; font-weight: 700; line-height: 1.2; }
@@ -135,7 +146,7 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .stretch-card { min-width: 0; display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 14px; overflow: hidden; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
 .stretch-card__media { position: relative; min-height: 100%; background: var(--color-primary-subtle); }
 .stretch-card__media img { width: 100%; height: 100%; min-height: 160px; display: block; object-fit: cover; }
-.stretch-card__media span { position: absolute; top: 10px; left: 10px; min-width: 34px; height: 24px; padding: 0 8px; display: grid; place-items: center; border-radius: 999px; color: var(--color-primary); background: rgb(255 255 255 / 92%); font-size: 10px; font-weight: 800; }
+.stretch-card__media span { position: absolute; top: 10px; left: 10px; min-width: 34px; height: 24px; padding: 0 8px; display: grid; place-items: center; border-radius: 999px; color: var(--color-primary); background: var(--color-surface-overlay); font-size: 10px; font-weight: 800; }
 .stretch-card__body { min-width: 0; padding: 14px 14px 14px 0; }
 .stretch-card small, .stretch-card h3, .stretch-card p, .stretch-card em { margin: 0; }
 .stretch-card small { display: block; color: var(--color-primary); font-size: 10px; font-weight: 800; }
@@ -151,11 +162,12 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .stretch-card--loading i:nth-child(1) { width: 42%; }
 .stretch-card--loading i:nth-child(2) { width: 82%; }
 .stretch-card--loading i:nth-child(3) { width: 62%; }
-.stretch-feedback { margin-top: 22px; padding: 28px 18px; display: flex; flex-direction: column; align-items: center; border: 1px solid #edc1c1; border-radius: 8px; background: #fff7f7; text-align: center; }
-.stretch-feedback > span { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; color: #c44f4f; background: var(--color-white); }
+.stretch-feedback { margin-top: 22px; padding: 28px 18px; display: flex; flex-direction: column; align-items: center; border: 1px solid var(--color-danger-border); border-radius: 8px; background: var(--color-danger-subtle); text-align: center; }
+.stretch-feedback > span { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; color: var(--color-danger); background: var(--color-white); }
 .stretch-feedback h3 { margin: 14px 0 0; color: var(--color-text-strong); font-size: 16px; }
 .stretch-feedback p { margin: 8px 0 18px; color: var(--color-text); font-size: 12px; line-height: 1.5; }
 .stretch-feedback .action-button { max-width: 180px; min-height: 44px; font-size: 13px; }
+.stretch-empty { min-height: 140px; margin: 20px 0 0; padding: 24px 18px; display: grid; place-items: center; border: 1px dashed var(--color-border-brand); border-radius: 8px; color: var(--color-text-muted); background: var(--color-primary-subtle); font-size: 13px; line-height: 1.5; text-align: center; }
 
 .routine-detail { padding-top: 0; }
 .routine-detail__image { width: calc(100% + 40px); height: 236px; margin-left: -20px; display: block; object-fit: cover; }
@@ -290,6 +302,11 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
   .routine-card > img { grid-row: 1 / 3; border-radius: 0; }
   .routine-card p { align-self: end; margin: 0 18px 8px 0; white-space: normal; font-size: 14px; }
   .routine-card small { align-self: start; font-size: 10px; }
+  .routine-card--loading { min-height: 142px; }
+  .routine-card--loading .routine-card__thumb { grid-row: 1 / 3; border-radius: 0; }
+  .routine-card--loading .routine-card__line { align-self: end; margin: 0 18px 8px 0; }
+  .routine-card--loading .routine-card__meta { align-self: start; margin: 0 18px 0 0; }
+  .routine-feedback, .routine-empty { margin-right: 0; }
   .bottom-nav { display: none; }
 }
 

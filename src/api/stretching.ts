@@ -219,5 +219,10 @@ export async function fetchStretchingRecommendations(): Promise<StretchingRecomm
   const items = Array.isArray(value) ? value : isRecord(value) && Array.isArray(value.items) ? value.items : null
   if (!items) throw new Error('스트레칭 추천 응답 형식을 확인할 수 없어요.')
 
-  return items.map((item, index) => mapApiStretchingRecommendation(isRecord(item) ? item : {}, index))
+  const validItems = items.filter(isRecord)
+  if (validItems.length !== items.length) {
+    throw new Error('스트레칭 추천 응답 형식을 확인할 수 없어요.')
+  }
+
+  return validItems.map((item, index) => mapApiStretchingRecommendation(item, index))
 }
