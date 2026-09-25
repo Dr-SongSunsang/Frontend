@@ -10,6 +10,8 @@ export type StretchingRecommendation = {
   targetPart: StretchingTargetPart
   targetLabel: string
   channelTitle: string
+  viewCount: number
+  publishedAt: string
   durationLabel: string
   recommendedTimeLabel: string
   summary: string
@@ -29,6 +31,8 @@ type ApiStretchingRecommendation = {
   part?: unknown
   channelTitle?: unknown
   creator?: unknown
+  viewCount?: unknown
+  publishedAt?: unknown
   durationLabel?: unknown
   duration?: unknown
   recommendedTimeLabel?: unknown
@@ -41,6 +45,7 @@ type ApiStretchingRecommendation = {
   steps?: unknown
   snippet?: unknown
   contentDetails?: unknown
+  statistics?: unknown
 }
 
 const BACKEND_HTTP_URL = (import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -54,7 +59,9 @@ export const mockStretchingRecommendations: StretchingRecommendation[] = [
     title: '목 긴장 완화 스트레칭',
     targetPart: 'neck',
     targetLabel: '목',
-    channelTitle: 'TurtleNeck 추천',
+    channelTitle: '',
+    viewCount: 18400,
+    publishedAt: '2026-09-05T09:00:00+09:00',
     durationLabel: '5분',
     recommendedTimeLabel: '20초씩 3세트',
     summary: '오래 앉아 있을 때 굳기 쉬운 목 옆 라인을 천천히 이완해요.',
@@ -73,7 +80,9 @@ export const mockStretchingRecommendations: StretchingRecommendation[] = [
     title: '어깨 말림 교정 스트레칭',
     targetPart: 'shoulder',
     targetLabel: '어깨',
-    channelTitle: 'TurtleNeck 추천',
+    channelTitle: '',
+    viewCount: 32600,
+    publishedAt: '2026-09-18T09:00:00+09:00',
     durationLabel: '7분',
     recommendedTimeLabel: '30초씩 2세트',
     summary: '앞으로 말린 어깨와 답답한 가슴을 함께 열어주는 루틴이에요.',
@@ -92,7 +101,9 @@ export const mockStretchingRecommendations: StretchingRecommendation[] = [
     title: '허리 부담 줄이는 앉은 자세 리셋',
     targetPart: 'back',
     targetLabel: '허리',
-    channelTitle: 'TurtleNeck 추천',
+    channelTitle: '',
+    viewCount: 12700,
+    publishedAt: '2026-09-23T09:00:00+09:00',
     durationLabel: '6분',
     recommendedTimeLabel: '15초씩 4세트',
     summary: '의자에 오래 앉은 뒤 허리와 등 전체의 긴장을 부드럽게 풀어요.',
@@ -114,6 +125,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim().length > 0 ? value : fallback
+}
+
+function readNumber(value: unknown, fallback: number) {
+  const parsed = typeof value === 'string' ? Number(value.replaceAll(',', '')) : value
+  return typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : fallback
 }
 
 function readRecord(value: unknown) {
@@ -165,6 +181,7 @@ function mapApiStretchingRecommendation(item: ApiStretchingRecommendation, index
   const thumbnails = readRecord(snippet.thumbnails)
   const thumbnail = readRecord(thumbnails.maxres ?? thumbnails.high ?? thumbnails.medium ?? thumbnails.default)
   const contentDetails = readRecord(item.contentDetails)
+  const statistics = readRecord(item.statistics)
   const youtubeVideoId = readString(item.youtubeVideoId ?? item.videoId ?? id.videoId, '')
   const targetPart = readTargetPart(item.targetPart ?? item.part)
   const title = readString(item.title ?? snippet.title, fallback.title)
@@ -174,7 +191,9 @@ function mapApiStretchingRecommendation(item: ApiStretchingRecommendation, index
     title,
     targetPart,
     targetLabel: getTargetLabel(targetPart),
-    channelTitle: readString(item.channelTitle ?? item.creator ?? snippet.channelTitle, fallback.channelTitle),
+    channelTitle: readString(item.channelTitle ?? item.creator ?? snippet.channelTitle, ''),
+    viewCount: readNumber(item.viewCount ?? statistics.viewCount, fallback.viewCount),
+    publishedAt: readString(item.publishedAt ?? snippet.publishedAt, fallback.publishedAt),
     durationLabel: formatYoutubeDuration(item.durationLabel ?? item.duration ?? contentDetails.duration, fallback.durationLabel),
     recommendedTimeLabel: readString(item.recommendedTimeLabel ?? item.recommendedTime, fallback.recommendedTimeLabel),
     summary: readString(item.summary ?? item.description ?? snippet.description, fallback.summary),

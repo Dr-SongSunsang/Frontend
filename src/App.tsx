@@ -6,7 +6,6 @@ import {
   NavLink,
   Route,
   Routes,
-  useLocation,
   useParams,
 } from 'react-router-dom'
 import './App.css'
@@ -43,6 +42,14 @@ const targetFilters: Array<{ id: 'all' | StretchingTargetPart; label: string }> 
   { id: 'neck', label: '목' },
   { id: 'shoulder', label: '어깨' },
   { id: 'back', label: '허리' },
+]
+
+type StretchingSortOption = 'recommended' | 'popular' | 'latest'
+
+const stretchingSortOptions: Array<{ id: StretchingSortOption; label: string }> = [
+  { id: 'recommended', label: '추천순' },
+  { id: 'popular', label: '인기순' },
+  { id: 'latest', label: '최신순' },
 ]
 
 const postureStates: Record<PostureViewStatus, PostureState> = {
@@ -161,13 +168,26 @@ function SiteHeader() {
 }
 
 function BottomNav() {
-  const getNavClass = ({ isActive }: { isActive: boolean }) => isActive ? 'active' : undefined
+  const navItems: Array<{ to: string; label: string; icon: IconName; end?: boolean }> = [
+    { to: '/', label: '홈', icon: 'home', end: true },
+    { to: '/posture', label: '자세 측정', icon: 'camera' },
+    { to: '/stretching', label: '스트레칭', icon: 'heart' },
+    { to: '/statistics', label: '통계', icon: 'chart' },
+  ]
 
   return (
     <nav className="bottom-nav" aria-label="하단 메뉴">
-      <NavLink className={getNavClass} to="/statistics"><Icon name="chart" /><span>통계</span></NavLink>
-      <NavLink className={({ isActive }) => `bottom-nav__home${isActive ? ' active' : ''}`} to="/" end><span><Icon name="home" /></span><b>홈</b></NavLink>
-      <NavLink className={getNavClass} to="/stretching"><Icon name="heart" /><span>스트레칭</span></NavLink>
+      {navItems.map((item) => (
+        <NavLink
+          className={({ isActive }) => isActive ? 'active' : undefined}
+          end={item.end}
+          key={item.to}
+          to={item.to}
+        >
+          <Icon name={item.icon} />
+          <span>{item.label}</span>
+        </NavLink>
+      ))}
     </nav>
   )
 }
@@ -304,7 +324,7 @@ function StretchingCard({ recommendation }: { recommendation: StretchingRecommen
         <span>{recommendation.targetLabel}</span>
       </div>
       <div className="stretch-card__body">
-        <small>{recommendation.channelTitle}</small>
+        {recommendation.channelTitle && <small>{recommendation.channelTitle}</small>}
         <h3>{recommendation.title}</h3>
         <p>{recommendation.summary}</p>
         <em><Icon name="clock" /> {recommendation.durationLabel}</em>
@@ -344,12 +364,22 @@ function StretchingErrorState({ message, onRetry }: { message: string; onRetry: 
 function StretchingPage() {
   const { recommendations, status, errorMessage, retry } = useStretchingRecommendations()
   const [selectedTarget, setSelectedTarget] = useState<'all' | StretchingTargetPart>('all')
-  const visibleRecommendations = useMemo(
-    () => selectedTarget === 'all'
+  const [sortOption, setSortOption] = useState<StretchingSortOption>('recommended')
+  const visibleRecommendations = useMemo(() => {
+    const filteredRecommendations = selectedTarget === 'all'
       ? recommendations
-      : recommendations.filter((recommendation) => recommendation.targetPart === selectedTarget),
-    [recommendations, selectedTarget],
-  )
+      : recommendations.filter((recommendation) => recommendation.targetPart === selectedTarget)
+
+    if (sortOption === 'popular') {
+      return [...filteredRecommendations].sort((a, b) => b.viewCount - a.viewCount)
+    }
+
+    if (sortOption === 'latest') {
+      return [...filteredRecommendations].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
+    }
+
+    return filteredRecommendations
+  }, [recommendations, selectedTarget, sortOption])
 
   return (
     <main className="feature-main">
@@ -361,28 +391,37 @@ function StretchingPage() {
           <p>집이나 사무실에서 바로 따라 할 수 있는 루틴이에요.</p>
         </div>
 
-        <div className="stretch-summary">
-          <span><img src={turtle} alt="" /></span>
-          <p><strong>오늘의 추천 루틴</strong><small>목, 어깨, 허리 상태에 맞춰 골라 보세요</small></p>
-          <b>{status === 'success' ? `${recommendations.length}개` : '...'}</b>
-        </div>
-
         {status === 'loading' && <StretchingLoadingState />}
         {status === 'error' && <StretchingErrorState message={errorMessage} onRetry={retry} />}
         {status === 'success' && (
           <>
-            <div className="target-filter" aria-label="부위별 스트레칭 필터">
-              {targetFilters.map((filter) => (
-                <button
-                  aria-pressed={selectedTarget === filter.id}
-                  className={selectedTarget === filter.id ? 'active' : undefined}
-                  key={filter.id}
-                  type="button"
-                  onClick={() => setSelectedTarget(filter.id)}
+            <div className="stretch-controls">
+              <div className="target-filter" aria-label="부위별 스트레칭 필터">
+                {targetFilters.map((filter) => (
+                  <button
+                    aria-pressed={selectedTarget === filter.id}
+                    className={selectedTarget === filter.id ? 'active' : undefined}
+                    key={filter.id}
+                    type="button"
+                    onClick={() => setSelectedTarget(filter.id)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+
+              <label className="stretch-sort">
+                <select
+                  aria-label="스트레칭 정렬"
+                  value={sortOption}
+                  onChange={(event) => setSortOption(event.target.value as StretchingSortOption)}
                 >
-                  {filter.label}
-                </button>
-              ))}
+                  {stretchingSortOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+                <Icon name="chevron" />
+              </label>
             </div>
 
             <div className="stretch-list">
@@ -425,7 +464,9 @@ function StretchingDetailPage() {
         <article className="feature-page routine-detail">
           <img className="routine-detail__image" src={recommendation.thumbnailUrl} alt={recommendation.thumbnailAlt} />
           <div className="routine-detail__body">
-            <p className="feature-kicker">{recommendation.targetLabel} · {recommendation.channelTitle}</p>
+            <p className="feature-kicker">
+              {recommendation.targetLabel}{recommendation.channelTitle ? ` · ${recommendation.channelTitle}` : ''}
+            </p>
             <h2>{recommendation.title}</h2>
             <p className="routine-duration"><Icon name="clock" /> {recommendation.durationLabel} · {recommendation.recommendedTimeLabel}</p>
             <p className="routine-summary">{recommendation.summary}</p>
@@ -613,15 +654,28 @@ function StatisticsPage() {
   )
 }
 
+function NotFoundPage() {
+  return (
+    <main className="feature-main not-found-main">
+      <MobilePageHeader title="페이지 없음" />
+      <section className="feature-page not-found-page" aria-labelledby="not-found-title">
+        <span className="not-found-page__icon"><Icon name="alert" /></span>
+        <p className="feature-kicker">404</p>
+        <h2 id="not-found-title">페이지를 찾을 수 없어요</h2>
+        <p>입력한 주소가 올바른지 확인하거나 홈으로 돌아가 주세요.</p>
+        <Link className="action-button" to="/"><Icon name="home" />홈으로 이동</Link>
+      </section>
+    </main>
+  )
+}
+
 function RoutedApp() {
   const [showSplash, setShowSplash] = useState(true)
-  const location = useLocation()
-  const isImmersiveRoute = location.pathname === '/posture'
 
   if (showSplash) return <Splash onEnter={() => setShowSplash(false)} />
 
   return (
-    <div className={`page-shell${isImmersiveRoute ? ' page-shell--immersive' : ''}`}>
+    <div className="page-shell">
       <SiteHeader />
       <Routes>
         <Route path="/" element={<MainPage />} />
@@ -629,9 +683,9 @@ function RoutedApp() {
         <Route path="/stretching" element={<StretchingPage />} />
         <Route path="/stretching/:routineId" element={<StretchingDetailPage />} />
         <Route path="/statistics" element={<StatisticsPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
-      {!isImmersiveRoute && <BottomNav />}
+      <BottomNav />
     </div>
   )
 }
