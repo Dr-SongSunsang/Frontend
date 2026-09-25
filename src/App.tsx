@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   BrowserRouter,
   Link,
@@ -6,14 +6,14 @@ import {
   NavLink,
   Route,
   Routes,
-  useLocation,
   useParams,
 } from 'react-router-dom'
 import './App.css'
+import { mockPostureStatisticsHistory, type PostureStatisticsSummary, type PostureStatisticsTrendUnit, type PostureTrendPoint } from './api/statistics'
+import { mockStretchingRecommendations, type StretchingRecommendation, type StretchingTargetPart } from './api/stretching'
 import turtle from './assets/turtle.png'
-import stretchNeck from './assets/stretch-neck.png'
-import stretchShoulder from './assets/stretch-shoulder.png'
 import { usePostureMeasurement, type PostureViewStatus } from './hooks/usePostureMeasurement'
+import { useStretchingRecommendations } from './hooks/useStretchingRecommendations'
 
 type IconName =
   | 'alert'
@@ -27,17 +27,7 @@ type IconName =
   | 'heart'
   | 'home'
   | 'play'
-  | 'stretch'
-
-type Routine = {
-  id: string
-  title: string
-  creator: string
-  duration: string
-  image: string
-  imageAlt: string
-  steps: string[]
-}
+  | 'refresh'
 
 type PostureState = {
   status: PostureViewStatus
@@ -45,25 +35,21 @@ type PostureState = {
   message: string
 }
 
-const routines: Routine[] = [
-  {
-    id: 'neck',
-    title: '하루 두 번! 꼭 해야하는 15분 상체 순환 스트레칭',
-    creator: '행트',
-    duration: '15분',
-    image: stretchNeck,
-    imageAlt: '앉아서 목과 어깨를 스트레칭하는 여성',
-    steps: ['어깨를 편안하게 내리고 바르게 앉아요.', '한쪽 손으로 머리를 잡고 천천히 기울여요.', '반대쪽도 같은 자세로 20초간 유지해요.'],
-  },
-  {
-    id: 'shoulder',
-    title: '목 결림, 어깨 뭉침을 풀어주는 스트레칭',
-    creator: '예린 mind yoga',
-    duration: '10분',
-    image: stretchShoulder,
-    imageAlt: '앉아서 목을 스트레칭하는 여성',
-    steps: ['양손을 어깨에 올리고 가슴을 활짝 펴요.', '팔꿈치로 큰 원을 그리며 천천히 돌려요.', '호흡을 유지하며 반대 방향으로 반복해요.'],
-  },
+const featuredStretchingRecommendations = mockStretchingRecommendations.slice(0, 2)
+
+const targetFilters: Array<{ id: 'all' | StretchingTargetPart; label: string }> = [
+  { id: 'all', label: '전체' },
+  { id: 'neck', label: '목' },
+  { id: 'shoulder', label: '어깨' },
+  { id: 'back', label: '허리' },
+]
+
+type StretchingSortOption = 'recommended' | 'popular' | 'latest'
+
+const stretchingSortOptions: Array<{ id: StretchingSortOption; label: string }> = [
+  { id: 'recommended', label: '추천순' },
+  { id: 'popular', label: '인기순' },
+  { id: 'latest', label: '최신순' },
 ]
 
 const postureStates: Record<PostureViewStatus, PostureState> = {
@@ -112,7 +98,7 @@ function Icon({ name }: { name: IconName }) {
     heart: <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5a5.5 5.5 0 0 0 1-8.9Z" />,
     home: <path d="M0 24V8L12 0l12 8v16h-9v-9.33H9V24H0Z" />,
     play: <path d="m9 7 8 5-8 5Z" />,
-    stretch: <><circle cx="12" cy="5" r="2" /><path d="m9 21 2-7-3-3M15 21l-2-7 3-4M5 8l3 3 4-3 4 2 3-3" /></>,
+    refresh: <><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16" /><path d="M3 21v-5h5M3 12A9 9 0 0 1 18.4 5.6L21 8" /><path d="M21 3v5h-5" /></>,
   }
 
   const filledIcons: IconName[] = ['chart', 'heart', 'home']
@@ -182,13 +168,26 @@ function SiteHeader() {
 }
 
 function BottomNav() {
-  const getNavClass = ({ isActive }: { isActive: boolean }) => isActive ? 'active' : undefined
+  const navItems: Array<{ to: string; label: string; icon: IconName; end?: boolean }> = [
+    { to: '/', label: '홈', icon: 'home', end: true },
+    { to: '/posture', label: '자세 측정', icon: 'camera' },
+    { to: '/stretching', label: '스트레칭', icon: 'heart' },
+    { to: '/statistics', label: '통계', icon: 'chart' },
+  ]
 
   return (
     <nav className="bottom-nav" aria-label="하단 메뉴">
-      <NavLink className={getNavClass} to="/statistics"><Icon name="chart" /><span>통계</span></NavLink>
-      <NavLink className={({ isActive }) => `bottom-nav__home${isActive ? ' active' : ''}`} to="/" end><span><Icon name="home" /></span><b>홈</b></NavLink>
-      <NavLink className={getNavClass} to="/stretching"><Icon name="heart" /><span>스트레칭</span></NavLink>
+      {navItems.map((item) => (
+        <NavLink
+          className={({ isActive }) => isActive ? 'active' : undefined}
+          end={item.end}
+          key={item.to}
+          to={item.to}
+        >
+          <Icon name={item.icon} />
+          <span>{item.label}</span>
+        </NavLink>
+      ))}
     </nav>
   )
 }
@@ -224,11 +223,11 @@ function MainPage() {
           <Link to="/stretching">전체 보기 <Icon name="chevron" /></Link>
         </div>
         <div className="routine-list">
-          {routines.map((routine) => (
-            <Link className="routine-card" to={`/stretching/${routine.id}`} key={routine.id}>
-              <img src={routine.image} alt={routine.imageAlt} />
-              <p>{routine.title}</p>
-              <small><span aria-hidden="true" /> {routine.creator}</small>
+          {featuredStretchingRecommendations.map((recommendation) => (
+            <Link className="routine-card" to={`/stretching/${recommendation.id}`} key={recommendation.id}>
+              <img src={recommendation.thumbnailUrl} alt={recommendation.thumbnailAlt} />
+              <p>{recommendation.title}</p>
+              <small><span aria-hidden="true" /> {recommendation.targetLabel} · {recommendation.durationLabel}</small>
             </Link>
           ))}
         </div>
@@ -317,7 +316,71 @@ function PosturePage() {
   )
 }
 
+function StretchingCard({ recommendation }: { recommendation: StretchingRecommendation }) {
+  return (
+    <Link className="stretch-card" to={`/stretching/${recommendation.id}`}>
+      <div className="stretch-card__media">
+        <img src={recommendation.thumbnailUrl} alt={recommendation.thumbnailAlt} />
+        <span>{recommendation.targetLabel}</span>
+      </div>
+      <div className="stretch-card__body">
+        {recommendation.channelTitle && <small>{recommendation.channelTitle}</small>}
+        <h3>{recommendation.title}</h3>
+        <p>{recommendation.summary}</p>
+        <em><Icon name="clock" /> {recommendation.durationLabel}</em>
+      </div>
+    </Link>
+  )
+}
+
+function StretchingLoadingState() {
+  return (
+    <div className="stretch-state" aria-live="polite" aria-label="스트레칭 추천을 불러오는 중">
+      {[0, 1, 2].map((item) => (
+        <div className="stretch-card stretch-card--loading" key={item}>
+          <span />
+          <div>
+            <i />
+            <i />
+            <i />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function StretchingErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="stretch-feedback" role="alert">
+      <span><Icon name="alert" /></span>
+      <h3>추천 스트레칭을 불러오지 못했어요</h3>
+      <p>{message}</p>
+      <button className="action-button" type="button" onClick={onRetry}><Icon name="refresh" />다시 시도</button>
+    </div>
+  )
+}
+
 function StretchingPage() {
+  const { recommendations, status, errorMessage, retry } = useStretchingRecommendations()
+  const [selectedTarget, setSelectedTarget] = useState<'all' | StretchingTargetPart>('all')
+  const [sortOption, setSortOption] = useState<StretchingSortOption>('recommended')
+  const visibleRecommendations = useMemo(() => {
+    const filteredRecommendations = selectedTarget === 'all'
+      ? recommendations
+      : recommendations.filter((recommendation) => recommendation.targetPart === selectedTarget)
+
+    if (sortOption === 'popular') {
+      return [...filteredRecommendations].sort((a, b) => b.viewCount - a.viewCount)
+    }
+
+    if (sortOption === 'latest') {
+      return [...filteredRecommendations].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
+    }
+
+    return filteredRecommendations
+  }, [recommendations, selectedTarget, sortOption])
+
   return (
     <main className="feature-main">
       <MobilePageHeader title="스트레칭" />
@@ -328,25 +391,46 @@ function StretchingPage() {
           <p>집이나 사무실에서 바로 따라 할 수 있는 루틴이에요.</p>
         </div>
 
-        <div className="stretch-summary">
-          <span><Icon name="stretch" /></span>
-          <p><strong>오늘의 목표 15분</strong><small>짧게라도 몸을 움직여 보세요</small></p>
-          <b>0 / 15</b>
-        </div>
+        {status === 'loading' && <StretchingLoadingState />}
+        {status === 'error' && <StretchingErrorState message={errorMessage} onRetry={retry} />}
+        {status === 'success' && (
+          <>
+            <div className="stretch-controls">
+              <div className="target-filter" aria-label="부위별 스트레칭 필터">
+                {targetFilters.map((filter) => (
+                  <button
+                    aria-pressed={selectedTarget === filter.id}
+                    className={selectedTarget === filter.id ? 'active' : undefined}
+                    key={filter.id}
+                    type="button"
+                    onClick={() => setSelectedTarget(filter.id)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
 
-        <div className="stretch-list">
-          {routines.map((routine) => (
-            <Link className="stretch-item" to={`/stretching/${routine.id}`} key={routine.id}>
-              <img src={routine.image} alt={routine.imageAlt} />
-              <span>
-                <small>{routine.creator}</small>
-                <strong>{routine.title}</strong>
-                <em><Icon name="clock" /> {routine.duration}</em>
-              </span>
-              <Icon name="chevron" />
-            </Link>
-          ))}
-        </div>
+              <label className="stretch-sort">
+                <select
+                  aria-label="스트레칭 정렬"
+                  value={sortOption}
+                  onChange={(event) => setSortOption(event.target.value as StretchingSortOption)}
+                >
+                  {stretchingSortOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+                <Icon name="chevron" />
+              </label>
+            </div>
+
+            <div className="stretch-list">
+              {visibleRecommendations.map((recommendation) => (
+                <StretchingCard recommendation={recommendation} key={recommendation.id} />
+              ))}
+            </div>
+          </>
+        )}
       </section>
     </main>
   )
@@ -354,9 +438,10 @@ function StretchingPage() {
 
 function StretchingDetailPage() {
   const { routineId } = useParams()
-  const routine = routines.find((item) => item.id === routineId)
+  const { recommendations, status, errorMessage, retry } = useStretchingRecommendations()
+  const recommendation = recommendations.find((item) => item.id === routineId)
 
-  if (!routine) return <Navigate to="/stretching" replace />
+  if (status === 'success' && !recommendation) return <Navigate to="/stretching" replace />
 
   return (
     <main className="feature-main">
@@ -365,52 +450,220 @@ function StretchingDetailPage() {
         <h1>스트레칭</h1>
         <span aria-hidden="true" />
       </header>
-      <article className="feature-page routine-detail">
-        <img className="routine-detail__image" src={routine.image} alt={routine.imageAlt} />
-        <div className="routine-detail__body">
-          <p className="feature-kicker">{routine.creator}</p>
-          <h2>{routine.title}</h2>
-          <p className="routine-duration"><Icon name="clock" /> 약 {routine.duration}</p>
-          <ol>
-            {routine.steps.map((step) => <li key={step}>{step}</li>)}
-          </ol>
-          <button className="action-button" type="button"><Icon name="play" />루틴 시작하기</button>
-        </div>
-      </article>
+      {status === 'loading' && (
+        <section className="feature-page stretching-page">
+          <StretchingLoadingState />
+        </section>
+      )}
+      {status === 'error' && (
+        <section className="feature-page stretching-page">
+          <StretchingErrorState message={errorMessage} onRetry={retry} />
+        </section>
+      )}
+      {status === 'success' && recommendation && (
+        <article className="feature-page routine-detail">
+          <img className="routine-detail__image" src={recommendation.thumbnailUrl} alt={recommendation.thumbnailAlt} />
+          <div className="routine-detail__body">
+            <p className="feature-kicker">
+              {recommendation.targetLabel}{recommendation.channelTitle ? ` · ${recommendation.channelTitle}` : ''}
+            </p>
+            <h2>{recommendation.title}</h2>
+            <p className="routine-duration"><Icon name="clock" /> {recommendation.durationLabel} · {recommendation.recommendedTimeLabel}</p>
+            <p className="routine-summary">{recommendation.summary}</p>
+            <ol>
+              {recommendation.method.map((step) => <li key={step}>{step}</li>)}
+            </ol>
+            {recommendation.youtubeUrl ? (
+              <a className="action-button" href={recommendation.youtubeUrl} target="_blank" rel="noreferrer"><Icon name="play" />영상으로 보기</a>
+            ) : (
+              <button className="action-button" type="button"><Icon name="play" />루틴 시작하기</button>
+            )}
+          </div>
+        </article>
+      )}
     </main>
   )
 }
 
-function StatisticsPage() {
-  const weeklyScores = [55, 72, 62, 88, 76, 42, 68]
-  const days = ['월', '화', '수', '목', '금', '토', '일']
+function formatDurationMinutes(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours === 0) return `${minutes}분`
+  if (minutes === 0) return `${hours}시간`
+  return `${hours}시간 ${minutes}분`
+}
+
+function formatMonthDay(date: string) {
+  const [, month, day] = date.split('-').map(Number)
+  return `${month}월 ${day}일`
+}
+
+function formatStatisticsPeriod(startDate: string, endDate: string) {
+  return `${formatMonthDay(startDate)}~ ${formatMonthDay(endDate)}`
+}
+
+function getRatioComparison(summary: PostureStatisticsSummary) {
+  if (summary.previousGoodPostureRatio === null) return null
+  const delta = summary.goodPostureRatio - summary.previousGoodPostureRatio
+  const direction = delta >= 0 ? 'up' : 'down'
+  const label = `${Math.abs(delta)}%`
+
+  return { direction, label }
+}
+
+function StatisticsLineChart({ points }: { points: PostureTrendPoint[] }) {
+  const axisValues = [100, 75, 50, 25, 0]
+  const width = 340
+  const height = 244
+  const plotLeft = 40
+  const plotRight = 10
+  const plotTop = 12
+  const plotBottom = 34
+  const plotWidth = width - plotLeft - plotRight
+  const plotHeight = height - plotTop - plotBottom
+  type PositionedPoint = PostureTrendPoint & { x: number; y: number | null; value: number | null }
+
+  const positionedPoints: PositionedPoint[] = points.map((point, index) => {
+    const x = points.length === 1 ? plotLeft + plotWidth / 2 : plotLeft + (plotWidth * index) / (points.length - 1)
+    const value = typeof point.value === 'number' ? Math.max(0, Math.min(100, point.value)) : null
+    const y = value === null ? null : plotTop + plotHeight - (plotHeight * value) / 100
+
+    return { ...point, x, y, value }
+  })
+  const plottablePoints = positionedPoints.filter((point): point is PositionedPoint & { y: number; value: number } => point.y !== null && point.value !== null)
+  const pathData = plottablePoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
+  const chartLabel = plottablePoints.map((point) => `${point.label} ${point.value}%`).join(', ')
 
   return (
-    <main className="feature-main">
-      <MobilePageHeader title="통계" />
-      <section className="feature-page statistics-page" aria-labelledby="statistics-title">
-        <div className="statistics-heading">
-          <span><Icon name="calendar" /></span>
-          <div><p>이번 주 자세 리포트</p><h2 id="statistics-title">꾸준히 좋아지고 있어요</h2></div>
+    <svg className="statistics-line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={chartLabel}>
+      {axisValues.map((value) => {
+        const y = plotTop + plotHeight - (plotHeight * value) / 100
+        return (
+          <g key={value}>
+            <text x={plotLeft - 9} y={y + 4} textAnchor="end">{value === 0 ? '0' : `${value}%`}</text>
+            <line className={value === 0 ? 'chart-axis' : undefined} x1={plotLeft} x2={width - plotRight} y1={y} y2={y} />
+          </g>
+        )
+      })}
+
+      {pathData && <path className="chart-trend-line" d={pathData} />}
+
+      {plottablePoints.map((point) => (
+        <circle cx={point.x} cy={point.y} key={point.id} r="5" />
+      ))}
+
+      {positionedPoints.map((point) => (
+        <text className="chart-x-label" x={point.x} y={height - 9} textAnchor="middle" key={point.id}>{point.label}</text>
+      ))}
+    </svg>
+  )
+}
+
+function StatisticsEmptyState() {
+  return (
+    <div className="statistics-empty" role="status">
+      <span><Icon name="calendar" /></span>
+      <h3>아직 측정 기록이 없어요</h3>
+      <p>자세 측정을 시작하면 기간별 변화가 여기에 표시됩니다.</p>
+      <Link className="action-button" to="/posture"><Icon name="play" />자세 측정 시작</Link>
+    </div>
+  )
+}
+
+function StatisticsPage() {
+  const [periodIndex, setPeriodIndex] = useState(mockPostureStatisticsHistory.length - 1)
+  const [trendUnit, setTrendUnit] = useState<PostureStatisticsTrendUnit>('daily')
+  const statistics = mockPostureStatisticsHistory[periodIndex]
+  const trend = statistics.trends[trendUnit]
+  const hasTrendData = trend.points.some((point) => typeof point.value === 'number')
+  const comparison = getRatioComparison(statistics.summary)
+  const canMovePrevious = periodIndex > 0
+  const canMoveNext = periodIndex < mockPostureStatisticsHistory.length - 1
+  const periodLabel = formatStatisticsPeriod(statistics.period.startDate, statistics.period.endDate)
+  const trendOptions: Array<{ unit: PostureStatisticsTrendUnit; label: string }> = [
+    { unit: 'daily', label: '일간' },
+    { unit: 'weekly', label: '주간' },
+  ]
+
+  return (
+    <main className="feature-main statistics-main">
+      <section className="statistics-page" aria-labelledby="statistics-title">
+        <header className="statistics-period-bar">
+          <button type="button" aria-label="이전 기간" disabled={!canMovePrevious} onClick={() => setPeriodIndex((current) => Math.max(0, current - 1))}>
+            <Icon name="chevron" />
+          </button>
+          <h1 id="statistics-title"><Icon name="calendar" />{periodLabel}</h1>
+          <button type="button" aria-label="다음 기간" disabled={!canMoveNext} onClick={() => setPeriodIndex((current) => Math.min(mockPostureStatisticsHistory.length - 1, current + 1))}>
+            <Icon name="chevron" />
+          </button>
+        </header>
+
+        <div className="statistics-content">
+          <section className="statistics-summary" aria-label="자세 통계 요약">
+            <div>
+              <strong>{formatDurationMinutes(statistics.summary.goodPostureMinutes)}</strong>
+              <span>바른자세 유지 시간</span>
+            </div>
+            <div>
+              <strong>{statistics.summary.goodPostureRatio}%</strong>
+              <span>바른 자세 유지 비율</span>
+            </div>
+            <div>
+              <strong>{statistics.summary.correctionCount}회</strong>
+              <span>교정 필요 횟수</span>
+            </div>
+          </section>
+
+          <section className="posture-trend" aria-labelledby="posture-trend-title">
+            <div className="posture-trend__header">
+              <div>
+                <h2 id="posture-trend-title">{trend.title}</h2>
+                <div className="trend-tabs" role="tablist" aria-label="통계 단위">
+                  {trendOptions.map((option) => (
+                    <button
+                      aria-selected={trendUnit === option.unit}
+                      className={trendUnit === option.unit ? 'active' : undefined}
+                      key={option.unit}
+                      role="tab"
+                      type="button"
+                      onClick={() => setTrendUnit(option.unit)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {hasTrendData && (
+                <div className="posture-trend__score">
+                  <strong>{statistics.summary.goodPostureRatio}%</strong>
+                  {comparison && (
+                    <span className={`trend-comparison trend-comparison--${comparison.direction}`}>
+                      <span>(지난주 대비 </span><i aria-hidden="true" /><b>{comparison.label}</b><span>)</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {hasTrendData ? <StatisticsLineChart points={trend.points} /> : <StatisticsEmptyState />}
+          </section>
         </div>
+      </section>
+    </main>
+  )
+}
 
-        <div className="score-grid">
-          <div><span>평균 자세 점수</span><strong>78<small>점</small></strong><em>지난주보다 +6</em></div>
-          <div><span>측정 시간</span><strong>4.2<small>시간</small></strong><em>목표의 84%</em></div>
-        </div>
-
-        <section className="weekly-chart" aria-labelledby="weekly-title">
-          <div><h3 id="weekly-title">주간 자세 점수</h3><span>9월 21일 - 27일</span></div>
-          <div className="chart-bars">
-            {weeklyScores.map((score, index) => (
-              <span className={index === 3 ? 'best' : undefined} key={days[index]}>
-                <i style={{ height: `${score}%` }}><b>{score}</b></i><small>{days[index]}</small>
-              </span>
-            ))}
-          </div>
-        </section>
-
-        <div className="weekly-tip"><img src={turtle} alt="" /><p><strong>이번 주 한마디</strong><span>목요일의 바른 자세를 잘 유지했어요. 다음 주에도 틈틈이 어깨를 펴주세요!</span></p></div>
+function NotFoundPage() {
+  return (
+    <main className="feature-main not-found-main">
+      <MobilePageHeader title="페이지 없음" />
+      <section className="feature-page not-found-page" aria-labelledby="not-found-title">
+        <span className="not-found-page__icon"><Icon name="alert" /></span>
+        <p className="feature-kicker">404</p>
+        <h2 id="not-found-title">페이지를 찾을 수 없어요</h2>
+        <p>입력한 주소가 올바른지 확인하거나 홈으로 돌아가 주세요.</p>
+        <Link className="action-button" to="/"><Icon name="home" />홈으로 이동</Link>
       </section>
     </main>
   )
@@ -418,13 +671,11 @@ function StatisticsPage() {
 
 function RoutedApp() {
   const [showSplash, setShowSplash] = useState(true)
-  const location = useLocation()
-  const isImmersiveRoute = location.pathname === '/posture'
 
   if (showSplash) return <Splash onEnter={() => setShowSplash(false)} />
 
   return (
-    <div className={`page-shell${isImmersiveRoute ? ' page-shell--immersive' : ''}`}>
+    <div className="page-shell">
       <SiteHeader />
       <Routes>
         <Route path="/" element={<MainPage />} />
@@ -432,9 +683,9 @@ function RoutedApp() {
         <Route path="/stretching" element={<StretchingPage />} />
         <Route path="/stretching/:routineId" element={<StretchingDetailPage />} />
         <Route path="/statistics" element={<StatisticsPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
-      {!isImmersiveRoute && <BottomNav />}
+      <BottomNav />
     </div>
   )
 }
