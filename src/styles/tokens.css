@@ -23,6 +23,9 @@
   --color-primary-soft: var(--color-green-30);
   --color-primary-subtle: var(--color-green-10);
   --color-accent: var(--color-brown);
+  --color-danger: #c44f4f;
+  --color-danger-subtle: #fff7f7;
+  --color-danger-border: #edc1c1;
 
   --color-text-strong: var(--color-black-100);
   --color-text: var(--color-black-70);
@@ -32,6 +35,7 @@
 
   --color-background: var(--color-white);
   --color-surface: var(--color-white);
+  --color-surface-overlay: rgb(255 255 255 / 92%);
   --color-surface-subtle: var(--color-green-10);
   --color-border: var(--color-black-10);
   --color-border-brand: var(--color-green-30);
