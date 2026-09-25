@@ -11,7 +11,7 @@ import {
 } from 'react-router-dom'
 import './App.css'
 import { mockPostureStatisticsHistory, type PostureStatisticsSummary, type PostureStatisticsTrendUnit, type PostureTrendPoint } from './api/statistics'
-import { mockStretchingRecommendations, type StretchingRecommendation, type StretchingTargetPart } from './api/stretching'
+import { type StretchingRecommendation, type StretchingTargetPart } from './api/stretching'
 import turtle from './assets/turtle.png'
 import { usePostureMeasurement, type PostureViewStatus } from './hooks/usePostureMeasurement'
 import { useStretchingRecommendations } from './hooks/useStretchingRecommendations'
@@ -35,8 +35,6 @@ type PostureState = {
   title: string
   message: string
 }
-
-const featuredStretchingRecommendations = mockStretchingRecommendations.slice(0, 2)
 
 const targetFilters: Array<{ id: 'all' | StretchingTargetPart; label: string }> = [
   { id: 'all', label: '전체' },
@@ -183,6 +181,9 @@ function MobilePageHeader({ title }: { title: string }) {
 }
 
 function MainPage() {
+  const { recommendations, status, errorMessage, retry } = useStretchingRecommendations()
+  const featuredStretchingRecommendations = recommendations.slice(0, 2)
+
   return (
     <main className="home-main">
       <section className="hero" aria-labelledby="hero-title">
@@ -202,15 +203,39 @@ function MainPage() {
           <div className="section-heading__title"><img src={turtle} alt="" /><h2 id="recommend-title">오늘의 추천 스트레칭</h2></div>
           <Link to="/stretching">전체 보기 <Icon name="chevron" /></Link>
         </div>
-        <div className="routine-list">
-          {featuredStretchingRecommendations.map((recommendation) => (
-            <Link className="routine-card" to={`/stretching/${recommendation.id}`} key={recommendation.id}>
-              <img src={recommendation.thumbnailUrl} alt={recommendation.thumbnailAlt} />
-              <p>{recommendation.title}</p>
-              <small><span aria-hidden="true" /> {recommendation.targetLabel} · {recommendation.durationLabel}</small>
-            </Link>
-          ))}
-        </div>
+        {status === 'loading' && (
+          <div className="routine-list" role="status" aria-live="polite">
+            <span className="visually-hidden">추천 스트레칭을 불러오는 중</span>
+            {[0, 1].map((item) => (
+              <div className="routine-card routine-card--loading" aria-hidden="true" key={item}>
+                <span className="routine-card__thumb" />
+                <span className="routine-card__line" />
+                <span className="routine-card__meta" />
+              </div>
+            ))}
+          </div>
+        )}
+        {status === 'error' && (
+          <div className="routine-feedback" role="alert">
+            <p>{errorMessage}</p>
+            <button type="button" onClick={retry}><Icon name="refresh" />다시 시도</button>
+          </div>
+        )}
+        {status === 'success' && (
+          featuredStretchingRecommendations.length === 0 ? (
+            <p className="routine-empty">추천 스트레칭이 아직 없어요.</p>
+          ) : (
+            <div className="routine-list">
+              {featuredStretchingRecommendations.map((recommendation) => (
+                <Link className="routine-card" to={`/stretching/${recommendation.id}`} key={recommendation.id}>
+                  <img src={recommendation.thumbnailUrl} alt={recommendation.thumbnailAlt} />
+                  <p>{recommendation.title}</p>
+                  <small><span aria-hidden="true" /> {recommendation.targetLabel} · {recommendation.durationLabel}</small>
+                </Link>
+              ))}
+            </div>
+          )
+        )}
       </section>
     </main>
   )
@@ -315,9 +340,10 @@ function StretchingCard({ recommendation }: { recommendation: StretchingRecommen
 
 function StretchingLoadingState() {
   return (
-    <div className="stretch-state" aria-live="polite" aria-label="스트레칭 추천을 불러오는 중">
+    <div className="stretch-state" role="status" aria-live="polite">
+      <span className="visually-hidden">스트레칭 추천을 불러오는 중</span>
       {[0, 1, 2].map((item) => (
-        <div className="stretch-card stretch-card--loading" key={item}>
+        <div className="stretch-card stretch-card--loading" aria-hidden="true" key={item}>
           <span />
           <div>
             <i />
@@ -371,7 +397,7 @@ function StretchingPage() {
         {status === 'error' && <StretchingErrorState message={errorMessage} onRetry={retry} />}
         {status === 'success' && (
           <>
-            <div className="target-filter" aria-label="부위별 스트레칭 필터">
+            <div className="target-filter" role="group" aria-label="부위별 스트레칭 필터">
               {targetFilters.map((filter) => (
                 <button
                   aria-pressed={selectedTarget === filter.id}
@@ -385,11 +411,15 @@ function StretchingPage() {
               ))}
             </div>
 
-            <div className="stretch-list">
-              {visibleRecommendations.map((recommendation) => (
-                <StretchingCard recommendation={recommendation} key={recommendation.id} />
-              ))}
-            </div>
+            {visibleRecommendations.length === 0 ? (
+              <p className="stretch-empty">해당 부위의 추천 스트레칭이 아직 없어요.</p>
+            ) : (
+              <div className="stretch-list">
+                {visibleRecommendations.map((recommendation) => (
+                  <StretchingCard recommendation={recommendation} key={recommendation.id} />
+                ))}
+              </div>
+            )}
           </>
         )}
       </section>
