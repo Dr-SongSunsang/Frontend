@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   BrowserRouter,
   Link,
@@ -10,10 +10,10 @@ import {
   useParams,
 } from 'react-router-dom'
 import './App.css'
+import { mockStretchingRecommendations, type StretchingRecommendation, type StretchingTargetPart } from './api/stretching'
 import turtle from './assets/turtle.png'
-import stretchNeck from './assets/stretch-neck.png'
-import stretchShoulder from './assets/stretch-shoulder.png'
 import { usePostureMeasurement, type PostureViewStatus } from './hooks/usePostureMeasurement'
+import { useStretchingRecommendations } from './hooks/useStretchingRecommendations'
 
 type IconName =
   | 'alert'
@@ -27,17 +27,7 @@ type IconName =
   | 'heart'
   | 'home'
   | 'play'
-  | 'stretch'
-
-type Routine = {
-  id: string
-  title: string
-  creator: string
-  duration: string
-  image: string
-  imageAlt: string
-  steps: string[]
-}
+  | 'refresh'
 
 type PostureState = {
   status: PostureViewStatus
@@ -45,25 +35,13 @@ type PostureState = {
   message: string
 }
 
-const routines: Routine[] = [
-  {
-    id: 'neck',
-    title: '하루 두 번! 꼭 해야하는 15분 상체 순환 스트레칭',
-    creator: '행트',
-    duration: '15분',
-    image: stretchNeck,
-    imageAlt: '앉아서 목과 어깨를 스트레칭하는 여성',
-    steps: ['어깨를 편안하게 내리고 바르게 앉아요.', '한쪽 손으로 머리를 잡고 천천히 기울여요.', '반대쪽도 같은 자세로 20초간 유지해요.'],
-  },
-  {
-    id: 'shoulder',
-    title: '목 결림, 어깨 뭉침을 풀어주는 스트레칭',
-    creator: '예린 mind yoga',
-    duration: '10분',
-    image: stretchShoulder,
-    imageAlt: '앉아서 목을 스트레칭하는 여성',
-    steps: ['양손을 어깨에 올리고 가슴을 활짝 펴요.', '팔꿈치로 큰 원을 그리며 천천히 돌려요.', '호흡을 유지하며 반대 방향으로 반복해요.'],
-  },
+const featuredStretchingRecommendations = mockStretchingRecommendations.slice(0, 2)
+
+const targetFilters: Array<{ id: 'all' | StretchingTargetPart; label: string }> = [
+  { id: 'all', label: '전체' },
+  { id: 'neck', label: '목' },
+  { id: 'shoulder', label: '어깨' },
+  { id: 'back', label: '허리' },
 ]
 
 const postureStates: Record<PostureViewStatus, PostureState> = {
@@ -112,7 +90,7 @@ function Icon({ name }: { name: IconName }) {
     heart: <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5a5.5 5.5 0 0 0 1-8.9Z" />,
     home: <path d="M0 24V8L12 0l12 8v16h-9v-9.33H9V24H0Z" />,
     play: <path d="m9 7 8 5-8 5Z" />,
-    stretch: <><circle cx="12" cy="5" r="2" /><path d="m9 21 2-7-3-3M15 21l-2-7 3-4M5 8l3 3 4-3 4 2 3-3" /></>,
+    refresh: <><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16" /><path d="M3 21v-5h5M3 12A9 9 0 0 1 18.4 5.6L21 8" /><path d="M21 3v5h-5" /></>,
   }
 
   const filledIcons: IconName[] = ['chart', 'heart', 'home']
@@ -224,11 +202,11 @@ function MainPage() {
           <Link to="/stretching">전체 보기 <Icon name="chevron" /></Link>
         </div>
         <div className="routine-list">
-          {routines.map((routine) => (
-            <Link className="routine-card" to={`/stretching/${routine.id}`} key={routine.id}>
-              <img src={routine.image} alt={routine.imageAlt} />
-              <p>{routine.title}</p>
-              <small><span aria-hidden="true" /> {routine.creator}</small>
+          {featuredStretchingRecommendations.map((recommendation) => (
+            <Link className="routine-card" to={`/stretching/${recommendation.id}`} key={recommendation.id}>
+              <img src={recommendation.thumbnailUrl} alt={recommendation.thumbnailAlt} />
+              <p>{recommendation.title}</p>
+              <small><span aria-hidden="true" /> {recommendation.targetLabel} · {recommendation.durationLabel}</small>
             </Link>
           ))}
         </div>
@@ -317,7 +295,61 @@ function PosturePage() {
   )
 }
 
+function StretchingCard({ recommendation }: { recommendation: StretchingRecommendation }) {
+  return (
+    <Link className="stretch-card" to={`/stretching/${recommendation.id}`}>
+      <div className="stretch-card__media">
+        <img src={recommendation.thumbnailUrl} alt={recommendation.thumbnailAlt} />
+        <span>{recommendation.targetLabel}</span>
+      </div>
+      <div className="stretch-card__body">
+        <small>{recommendation.channelTitle}</small>
+        <h3>{recommendation.title}</h3>
+        <p>{recommendation.summary}</p>
+        <em><Icon name="clock" /> {recommendation.durationLabel}</em>
+      </div>
+    </Link>
+  )
+}
+
+function StretchingLoadingState() {
+  return (
+    <div className="stretch-state" aria-live="polite" aria-label="스트레칭 추천을 불러오는 중">
+      {[0, 1, 2].map((item) => (
+        <div className="stretch-card stretch-card--loading" key={item}>
+          <span />
+          <div>
+            <i />
+            <i />
+            <i />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function StretchingErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="stretch-feedback" role="alert">
+      <span><Icon name="alert" /></span>
+      <h3>추천 스트레칭을 불러오지 못했어요</h3>
+      <p>{message}</p>
+      <button className="action-button" type="button" onClick={onRetry}><Icon name="refresh" />다시 시도</button>
+    </div>
+  )
+}
+
 function StretchingPage() {
+  const { recommendations, status, errorMessage, retry } = useStretchingRecommendations()
+  const [selectedTarget, setSelectedTarget] = useState<'all' | StretchingTargetPart>('all')
+  const visibleRecommendations = useMemo(
+    () => selectedTarget === 'all'
+      ? recommendations
+      : recommendations.filter((recommendation) => recommendation.targetPart === selectedTarget),
+    [recommendations, selectedTarget],
+  )
+
   return (
     <main className="feature-main">
       <MobilePageHeader title="스트레칭" />
@@ -329,24 +361,36 @@ function StretchingPage() {
         </div>
 
         <div className="stretch-summary">
-          <span><Icon name="stretch" /></span>
-          <p><strong>오늘의 목표 15분</strong><small>짧게라도 몸을 움직여 보세요</small></p>
-          <b>0 / 15</b>
+          <span><img src={turtle} alt="" /></span>
+          <p><strong>오늘의 추천 루틴</strong><small>목, 어깨, 허리 상태에 맞춰 골라 보세요</small></p>
+          <b>{status === 'success' ? `${recommendations.length}개` : '...'}</b>
         </div>
 
-        <div className="stretch-list">
-          {routines.map((routine) => (
-            <Link className="stretch-item" to={`/stretching/${routine.id}`} key={routine.id}>
-              <img src={routine.image} alt={routine.imageAlt} />
-              <span>
-                <small>{routine.creator}</small>
-                <strong>{routine.title}</strong>
-                <em><Icon name="clock" /> {routine.duration}</em>
-              </span>
-              <Icon name="chevron" />
-            </Link>
-          ))}
-        </div>
+        {status === 'loading' && <StretchingLoadingState />}
+        {status === 'error' && <StretchingErrorState message={errorMessage} onRetry={retry} />}
+        {status === 'success' && (
+          <>
+            <div className="target-filter" aria-label="부위별 스트레칭 필터">
+              {targetFilters.map((filter) => (
+                <button
+                  aria-pressed={selectedTarget === filter.id}
+                  className={selectedTarget === filter.id ? 'active' : undefined}
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setSelectedTarget(filter.id)}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="stretch-list">
+              {visibleRecommendations.map((recommendation) => (
+                <StretchingCard recommendation={recommendation} key={recommendation.id} />
+              ))}
+            </div>
+          </>
+        )}
       </section>
     </main>
   )
@@ -354,9 +398,10 @@ function StretchingPage() {
 
 function StretchingDetailPage() {
   const { routineId } = useParams()
-  const routine = routines.find((item) => item.id === routineId)
+  const { recommendations, status, errorMessage, retry } = useStretchingRecommendations()
+  const recommendation = recommendations.find((item) => item.id === routineId)
 
-  if (!routine) return <Navigate to="/stretching" replace />
+  if (status === 'success' && !recommendation) return <Navigate to="/stretching" replace />
 
   return (
     <main className="feature-main">
@@ -365,18 +410,35 @@ function StretchingDetailPage() {
         <h1>스트레칭</h1>
         <span aria-hidden="true" />
       </header>
-      <article className="feature-page routine-detail">
-        <img className="routine-detail__image" src={routine.image} alt={routine.imageAlt} />
-        <div className="routine-detail__body">
-          <p className="feature-kicker">{routine.creator}</p>
-          <h2>{routine.title}</h2>
-          <p className="routine-duration"><Icon name="clock" /> 약 {routine.duration}</p>
-          <ol>
-            {routine.steps.map((step) => <li key={step}>{step}</li>)}
-          </ol>
-          <button className="action-button" type="button"><Icon name="play" />루틴 시작하기</button>
-        </div>
-      </article>
+      {status === 'loading' && (
+        <section className="feature-page stretching-page">
+          <StretchingLoadingState />
+        </section>
+      )}
+      {status === 'error' && (
+        <section className="feature-page stretching-page">
+          <StretchingErrorState message={errorMessage} onRetry={retry} />
+        </section>
+      )}
+      {status === 'success' && recommendation && (
+        <article className="feature-page routine-detail">
+          <img className="routine-detail__image" src={recommendation.thumbnailUrl} alt={recommendation.thumbnailAlt} />
+          <div className="routine-detail__body">
+            <p className="feature-kicker">{recommendation.targetLabel} · {recommendation.channelTitle}</p>
+            <h2>{recommendation.title}</h2>
+            <p className="routine-duration"><Icon name="clock" /> {recommendation.durationLabel} · {recommendation.recommendedTimeLabel}</p>
+            <p className="routine-summary">{recommendation.summary}</p>
+            <ol>
+              {recommendation.method.map((step) => <li key={step}>{step}</li>)}
+            </ol>
+            {recommendation.youtubeUrl ? (
+              <a className="action-button" href={recommendation.youtubeUrl} target="_blank" rel="noreferrer"><Icon name="play" />영상으로 보기</a>
+            ) : (
+              <button className="action-button" type="button"><Icon name="play" />루틴 시작하기</button>
+            )}
+          </div>
+        </article>
+      )}
     </main>
   )
 }
