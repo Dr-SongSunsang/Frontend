@@ -165,12 +165,12 @@ function mapApiStretchingRecommendation(item: ApiStretchingRecommendation, index
   const thumbnails = readRecord(snippet.thumbnails)
   const thumbnail = readRecord(thumbnails.maxres ?? thumbnails.high ?? thumbnails.medium ?? thumbnails.default)
   const contentDetails = readRecord(item.contentDetails)
-  const youtubeVideoId = readString(item.youtubeVideoId ?? item.videoId ?? id.videoId, fallback.youtubeVideoId || '')
+  const youtubeVideoId = readString(item.youtubeVideoId ?? item.videoId ?? id.videoId, '')
   const targetPart = readTargetPart(item.targetPart ?? item.part)
   const title = readString(item.title ?? snippet.title, fallback.title)
 
   return {
-    id: readString(typeof item.id === 'string' ? item.id : undefined, youtubeVideoId || fallback.id),
+    id: readString(typeof item.id === 'string' ? item.id : undefined, youtubeVideoId || `recommendation-${index}`),
     title,
     targetPart,
     targetLabel: getTargetLabel(targetPart),
@@ -182,7 +182,7 @@ function mapApiStretchingRecommendation(item: ApiStretchingRecommendation, index
     thumbnailAlt: `${title} 썸네일`,
     method: readMethod(item.method ?? item.steps, fallback.method),
     youtubeVideoId,
-    youtubeUrl: youtubeVideoId ? createYoutubeUrl(youtubeVideoId) : fallback.youtubeUrl,
+    youtubeUrl: youtubeVideoId ? createYoutubeUrl(youtubeVideoId) : undefined,
   }
 }
 
