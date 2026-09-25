@@ -10,6 +10,7 @@ import {
   useParams,
 } from 'react-router-dom'
 import './App.css'
+import { mockPostureStatisticsHistory, type PostureStatisticsSummary, type PostureStatisticsTrendUnit, type PostureTrendPoint } from './api/statistics'
 import { mockStretchingRecommendations, type StretchingRecommendation, type StretchingTargetPart } from './api/stretching'
 import turtle from './assets/turtle.png'
 import { usePostureMeasurement, type PostureViewStatus } from './hooks/usePostureMeasurement'
@@ -443,36 +444,170 @@ function StretchingDetailPage() {
   )
 }
 
-function StatisticsPage() {
-  const weeklyScores = [55, 72, 62, 88, 76, 42, 68]
-  const days = ['월', '화', '수', '목', '금', '토', '일']
+function formatDurationMinutes(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours === 0) return `${minutes}분`
+  if (minutes === 0) return `${hours}시간`
+  return `${hours}시간 ${minutes}분`
+}
+
+function formatMonthDay(date: string) {
+  const [, month, day] = date.split('-').map(Number)
+  return `${month}월 ${day}일`
+}
+
+function formatStatisticsPeriod(startDate: string, endDate: string) {
+  return `${formatMonthDay(startDate)}~ ${formatMonthDay(endDate)}`
+}
+
+function getRatioComparison(summary: PostureStatisticsSummary) {
+  if (summary.previousGoodPostureRatio === null) return null
+  const delta = summary.goodPostureRatio - summary.previousGoodPostureRatio
+  const direction = delta >= 0 ? 'up' : 'down'
+  const label = `${Math.abs(delta)}%`
+
+  return { direction, label }
+}
+
+function StatisticsLineChart({ points }: { points: PostureTrendPoint[] }) {
+  const axisValues = [100, 75, 50, 25, 0]
+  const width = 340
+  const height = 244
+  const plotLeft = 40
+  const plotRight = 10
+  const plotTop = 12
+  const plotBottom = 34
+  const plotWidth = width - plotLeft - plotRight
+  const plotHeight = height - plotTop - plotBottom
+  type PositionedPoint = PostureTrendPoint & { x: number; y: number | null; value: number | null }
+
+  const positionedPoints: PositionedPoint[] = points.map((point, index) => {
+    const x = points.length === 1 ? plotLeft + plotWidth / 2 : plotLeft + (plotWidth * index) / (points.length - 1)
+    const value = typeof point.value === 'number' ? Math.max(0, Math.min(100, point.value)) : null
+    const y = value === null ? null : plotTop + plotHeight - (plotHeight * value) / 100
+
+    return { ...point, x, y, value }
+  })
+  const plottablePoints = positionedPoints.filter((point): point is PositionedPoint & { y: number; value: number } => point.y !== null && point.value !== null)
+  const pathData = plottablePoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
+  const chartLabel = plottablePoints.map((point) => `${point.label} ${point.value}%`).join(', ')
 
   return (
-    <main className="feature-main">
-      <MobilePageHeader title="통계" />
-      <section className="feature-page statistics-page" aria-labelledby="statistics-title">
-        <div className="statistics-heading">
-          <span><Icon name="calendar" /></span>
-          <div><p>이번 주 자세 리포트</p><h2 id="statistics-title">꾸준히 좋아지고 있어요</h2></div>
+    <svg className="statistics-line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={chartLabel}>
+      {axisValues.map((value) => {
+        const y = plotTop + plotHeight - (plotHeight * value) / 100
+        return (
+          <g key={value}>
+            <text x={plotLeft - 9} y={y + 4} textAnchor="end">{value === 0 ? '0' : `${value}%`}</text>
+            <line className={value === 0 ? 'chart-axis' : undefined} x1={plotLeft} x2={width - plotRight} y1={y} y2={y} />
+          </g>
+        )
+      })}
+
+      {pathData && <path className="chart-trend-line" d={pathData} />}
+
+      {plottablePoints.map((point) => (
+        <circle cx={point.x} cy={point.y} key={point.id} r="5" />
+      ))}
+
+      {positionedPoints.map((point) => (
+        <text className="chart-x-label" x={point.x} y={height - 9} textAnchor="middle" key={point.id}>{point.label}</text>
+      ))}
+    </svg>
+  )
+}
+
+function StatisticsEmptyState() {
+  return (
+    <div className="statistics-empty" role="status">
+      <span><Icon name="calendar" /></span>
+      <h3>아직 측정 기록이 없어요</h3>
+      <p>자세 측정을 시작하면 기간별 변화가 여기에 표시됩니다.</p>
+      <Link className="action-button" to="/posture"><Icon name="play" />자세 측정 시작</Link>
+    </div>
+  )
+}
+
+function StatisticsPage() {
+  const [periodIndex, setPeriodIndex] = useState(mockPostureStatisticsHistory.length - 1)
+  const [trendUnit, setTrendUnit] = useState<PostureStatisticsTrendUnit>('daily')
+  const statistics = mockPostureStatisticsHistory[periodIndex]
+  const trend = statistics.trends[trendUnit]
+  const hasTrendData = trend.points.some((point) => typeof point.value === 'number')
+  const comparison = getRatioComparison(statistics.summary)
+  const canMovePrevious = periodIndex > 0
+  const canMoveNext = periodIndex < mockPostureStatisticsHistory.length - 1
+  const periodLabel = formatStatisticsPeriod(statistics.period.startDate, statistics.period.endDate)
+  const trendOptions: Array<{ unit: PostureStatisticsTrendUnit; label: string }> = [
+    { unit: 'daily', label: '일간' },
+    { unit: 'weekly', label: '주간' },
+  ]
+
+  return (
+    <main className="feature-main statistics-main">
+      <section className="statistics-page" aria-labelledby="statistics-title">
+        <header className="statistics-period-bar">
+          <button type="button" aria-label="이전 기간" disabled={!canMovePrevious} onClick={() => setPeriodIndex((current) => Math.max(0, current - 1))}>
+            <Icon name="chevron" />
+          </button>
+          <h1 id="statistics-title"><Icon name="calendar" />{periodLabel}</h1>
+          <button type="button" aria-label="다음 기간" disabled={!canMoveNext} onClick={() => setPeriodIndex((current) => Math.min(mockPostureStatisticsHistory.length - 1, current + 1))}>
+            <Icon name="chevron" />
+          </button>
+        </header>
+
+        <div className="statistics-content">
+          <section className="statistics-summary" aria-label="자세 통계 요약">
+            <div>
+              <strong>{formatDurationMinutes(statistics.summary.goodPostureMinutes)}</strong>
+              <span>바른자세 유지 시간</span>
+            </div>
+            <div>
+              <strong>{statistics.summary.goodPostureRatio}%</strong>
+              <span>바른 자세 유지 비율</span>
+            </div>
+            <div>
+              <strong>{statistics.summary.correctionCount}회</strong>
+              <span>교정 필요 횟수</span>
+            </div>
+          </section>
+
+          <section className="posture-trend" aria-labelledby="posture-trend-title">
+            <div className="posture-trend__header">
+              <div>
+                <h2 id="posture-trend-title">{trend.title}</h2>
+                <div className="trend-tabs" role="tablist" aria-label="통계 단위">
+                  {trendOptions.map((option) => (
+                    <button
+                      aria-selected={trendUnit === option.unit}
+                      className={trendUnit === option.unit ? 'active' : undefined}
+                      key={option.unit}
+                      role="tab"
+                      type="button"
+                      onClick={() => setTrendUnit(option.unit)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {hasTrendData && (
+                <div className="posture-trend__score">
+                  <strong>{statistics.summary.goodPostureRatio}%</strong>
+                  {comparison && (
+                    <span className={`trend-comparison trend-comparison--${comparison.direction}`}>
+                      <span>(지난주 대비 </span><i aria-hidden="true" /><b>{comparison.label}</b><span>)</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {hasTrendData ? <StatisticsLineChart points={trend.points} /> : <StatisticsEmptyState />}
+          </section>
         </div>
-
-        <div className="score-grid">
-          <div><span>평균 자세 점수</span><strong>78<small>점</small></strong><em>지난주보다 +6</em></div>
-          <div><span>측정 시간</span><strong>4.2<small>시간</small></strong><em>목표의 84%</em></div>
-        </div>
-
-        <section className="weekly-chart" aria-labelledby="weekly-title">
-          <div><h3 id="weekly-title">주간 자세 점수</h3><span>9월 21일 - 27일</span></div>
-          <div className="chart-bars">
-            {weeklyScores.map((score, index) => (
-              <span className={index === 3 ? 'best' : undefined} key={days[index]}>
-                <i style={{ height: `${score}%` }}><b>{score}</b></i><small>{days[index]}</small>
-              </span>
-            ))}
-          </div>
-        </section>
-
-        <div className="weekly-tip"><img src={turtle} alt="" /><p><strong>이번 주 한마디</strong><span>목요일의 바른 자세를 잘 유지했어요. 다음 주에도 틈틈이 어깨를 펴주세요!</span></p></div>
       </section>
     </main>
   )
