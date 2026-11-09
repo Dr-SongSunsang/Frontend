@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   calibrateDevice,
   POSTURE_DEVICE_ID,
+  POSTURE_THRESHOLDS,
   subscribePosture,
   type BackendPostureStatus,
   type DeviceStatus,
@@ -25,8 +26,15 @@ type CalibrationState = {
 
 const initialCalibration: CalibrationState = {
   phase: 'idle',
-  secondsRemaining: 5,
+  secondsRemaining: POSTURE_THRESHOLDS.calibrationSeconds,
   error: null,
+}
+
+/** 기준 측정 중 흔들림이 크면 서버가 실패를 돌려준다. 사용자에게 이유를 알기 쉽게 보여준다. */
+function getCalibrationErrorMessage(result: { error_code: string; message: string; std_dev?: number }) {
+  const isUnstable = typeof result.std_dev === 'number' || /UNSTABLE|MOVEMENT|STD/i.test(result.error_code)
+  if (isUnstable) return '측정 중 움직임이 감지됐어요. 바른 자세로 5초간 가만히 있어 주세요.'
+  return result.message
 }
 
 function mapPostureStatus(status: BackendPostureStatus): PostureViewStatus {
@@ -47,10 +55,11 @@ export function usePostureMeasurement() {
 
   useEffect(() => subscribePosture({
     onPosture: (message) => {
-      if (postureStatus.current !== message.status) {
-        postureStatus.current = message.status
-        setDurationSeconds(0)
-      }
+      // 주의 ↔ 위험 전환은 같은 '교정 필요' 구간이므로 시간을 이어서 센다.
+      const nextView = mapPostureStatus(message.status)
+      const previousView = postureStatus.current ? mapPostureStatus(postureStatus.current) : null
+      if (previousView !== nextView) setDurationSeconds(0)
+      postureStatus.current = message.status
       setMeasurement(message)
       setDeviceStatus(message.device_status)
       if (message.status === 'GOOD') setAlertMessage(null)
@@ -69,7 +78,7 @@ export function usePostureMeasurement() {
     if (status !== 'normal' && status !== 'needsCorrection') return
     const intervalId = window.setInterval(() => setDurationSeconds((seconds) => seconds + 1), 1000)
     return () => window.clearInterval(intervalId)
-  }, [measurement?.status, status])
+  }, [status])
 
   useEffect(() => () => {
     if (countdownId.current !== undefined) window.clearInterval(countdownId.current)
@@ -78,7 +87,7 @@ export function usePostureMeasurement() {
   const startCalibration = useCallback(async () => {
     if (calibration.phase === 'running') return
 
-    setCalibration({ phase: 'running', secondsRemaining: 5, error: null })
+    setCalibration({ phase: 'running', secondsRemaining: POSTURE_THRESHOLDS.calibrationSeconds, error: null })
     countdownId.current = window.setInterval(() => {
       setCalibration((current) => ({
         ...current,
@@ -91,7 +100,7 @@ export function usePostureMeasurement() {
     countdownId.current = undefined
 
     if (!result.success) {
-      setCalibration({ phase: 'failed', secondsRemaining: 5, error: result.message })
+      setCalibration({ phase: 'failed', secondsRemaining: POSTURE_THRESHOLDS.calibrationSeconds, error: getCalibrationErrorMessage(result) })
       return
     }
 
