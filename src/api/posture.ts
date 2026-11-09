@@ -284,7 +284,7 @@ function subscribeToMock(handlers: PostureSubscription): () => void {
           status,
           prev_status: alertedStatus,
           deviation,
-          message: status === 'BAD' ? '거북목 자세가 지속되고 있습니다' : '고개가 앞으로 나와 있어요',
+          message: status === 'BAD' ? '10초 넘게 고개가 앞으로 나와 있어요. 턱을 당기고 모니터를 눈높이로 올려 주세요.' : '고개를 살짝 뒤로 당겨 목을 세워 주세요.',
           timestamp,
         })
         lastAlertTick = tick

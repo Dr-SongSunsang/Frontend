@@ -53,21 +53,36 @@ export function usePostureMeasurement() {
   const countdownId = useRef<number | undefined>(undefined)
   const postureStatus = useRef<BackendPostureStatus | null>(null)
 
-  useEffect(() => subscribePosture({
-    onPosture: (message) => {
-      // 주의 ↔ 위험 전환은 같은 '교정 필요' 구간이므로 시간을 이어서 센다.
-      const nextView = mapPostureStatus(message.status)
-      const previousView = postureStatus.current ? mapPostureStatus(postureStatus.current) : null
-      if (previousView !== nextView) setDurationSeconds(0)
-      postureStatus.current = message.status
-      setMeasurement(message)
-      setDeviceStatus(message.device_status)
-      if (message.status === 'GOOD') setAlertMessage(null)
-    },
-    onAlert: (message) => setAlertMessage(message.message),
-    onDeviceStatus: (message) => setDeviceStatus(message.status),
-    onConnectionChange: setSocketState,
-  }), [])
+  useEffect(() => {
+    // 연결이 끊긴 구간은 측정이 중단된 것이므로, 재연결 후에는 지속 시간을 처음부터 센다.
+    const resetDuration = () => {
+      postureStatus.current = null
+      setDurationSeconds(0)
+    }
+
+    return subscribePosture({
+      onPosture: (message) => {
+        if (message.device_status === 'disconnected') resetDuration()
+        // 주의 ↔ 위험 전환은 같은 '교정 필요' 구간이므로 시간을 이어서 센다.
+        const nextView = mapPostureStatus(message.status)
+        const previousView = postureStatus.current ? mapPostureStatus(postureStatus.current) : null
+        if (previousView !== nextView) setDurationSeconds(0)
+        postureStatus.current = message.status
+        setMeasurement(message)
+        setDeviceStatus(message.device_status)
+        if (message.status === 'GOOD') setAlertMessage(null)
+      },
+      onAlert: (message) => setAlertMessage(message.message),
+      onDeviceStatus: (message) => {
+        if (message.status === 'disconnected') resetDuration()
+        setDeviceStatus(message.status)
+      },
+      onConnectionChange: (state) => {
+        if (state === 'disconnected') resetDuration()
+        setSocketState(state)
+      },
+    })
+  }, [])
 
   const isDisconnected = socketState === 'disconnected' || deviceStatus === 'disconnected'
   let status: PostureViewStatus = measurement ? mapPostureStatus(measurement.status) : 'analyzing'

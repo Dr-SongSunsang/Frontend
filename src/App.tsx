@@ -170,7 +170,7 @@ function DeviationGauge({ deviation, level }: { deviation: number; level: Deviat
         aria-label="기준 대비 편차"
         aria-valuemin={0}
         aria-valuemax={max}
-        aria-valuenow={Number(deviation.toFixed(1))}
+        aria-valuenow={Math.min(max, Math.max(0, Number(deviation.toFixed(1))))}
         aria-valuetext={`${deviation.toFixed(1)}도, ${deviationLevelLabels[level]}`}
       >
         <span className="deviation-gauge__zone deviation-gauge__zone--good" style={{ width: toPercent(POSTURE_THRESHOLDS.warningEnter) }} />
@@ -291,6 +291,7 @@ function PosturePage() {
     status,
     measurement,
     socketState,
+    alertMessage,
     durationSeconds,
     calibration,
     startCalibration,
@@ -305,7 +306,7 @@ function PosturePage() {
   const correctionMessage = isBad ? '턱을 당기고 모니터를 눈높이로 올려 주세요.' : postureState.message
   const statusMessage = status === 'calibrating'
     ? `${calibration.secondsRemaining}초 동안 바른 자세로 가만히 있어 주세요.`
-    : status === 'needsCorrection' ? correctionMessage : postureState.message
+    : status === 'needsCorrection' ? alertMessage || correctionMessage : postureState.message
   const hasSensorPitch = typeof measurement?.lower_pitch === 'number' && typeof measurement?.upper_pitch === 'number'
 
   return (
