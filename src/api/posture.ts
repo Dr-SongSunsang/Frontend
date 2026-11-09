@@ -2,15 +2,45 @@ export type BackendPostureStatus = 'GOOD' | 'WARNING' | 'BAD' | 'UNCALIBRATED'
 export type DeviceStatus = 'connected' | 'disconnected'
 export type SocketConnectionState = 'connecting' | 'connected' | 'disconnected'
 
+/**
+ * 판정 기준. 실제 판정은 서버(compute_status)가 하고, 프론트는 화면 표시와 mock에만 쓴다.
+ * 서버에서 임계값을 바꾸면 여기도 같이 맞춰 준다.
+ */
+export const POSTURE_THRESHOLDS = {
+  /** 편차가 이 값 이상이면 주의(WARNING) 진입 */
+  warningEnter: 10,
+  /** 주의 상태에서 이 값 미만으로 내려와야 정상 복귀 (경계값 깜빡임 방지) */
+  warningExit: 8,
+  /** 편차가 이 값 이상이면 위험(BAD) 진입 */
+  badEnter: 20,
+  /** 위험 상태에서 이 값 미만으로 내려와야 주의로 복귀 */
+  badExit: 18,
+  /** 기준을 넘은 상태가 이 시간 이상 지속될 때만 경고 */
+  sustainSeconds: 10,
+  /** 한 번 경고한 뒤 다시 울리지 않는 간격 (2~3분) */
+  alertCooldownSeconds: 150,
+  /** 기준 자세 측정 시간 */
+  calibrationSeconds: 5,
+  /** 게이지 최대 표시 범위 */
+  gaugeMax: 30,
+} as const
+
 export type PostureMessage = {
   type: 'posture'
   device_id: string
   status: BackendPostureStatus
+  /** 목 각도 = 상측(머리 쪽) pitch - 하측(몸통 쪽) pitch */
   current_delta: number
+  /** 기준 자세 설정 시 5초 평균으로 저장된 delta */
   baseline_delta: number | null
+  /** |current_delta - baseline_delta| */
   deviation: number | null
   device_status: DeviceStatus
   timestamp: string
+  /** 하측(몸통 쪽, 0x68) 센서 pitch. 서버가 전달할 때만 존재 */
+  lower_pitch?: number | null
+  /** 상측(머리 쪽, 0x69) 센서 pitch. 서버가 전달할 때만 존재 */
+  upper_pitch?: number | null
 }
 
 export type AlertMessage = {
@@ -63,6 +93,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+function readOptionalNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+  }
+  return null
+}
+
 function parseRealtimeMessage(raw: string): PostureMessage | AlertMessage | DeviceStatusMessage | null {
   try {
     const value: unknown = JSON.parse(raw)
@@ -83,6 +120,9 @@ function parseRealtimeMessage(raw: string): PostureMessage | AlertMessage | Devi
         deviation: value.deviation,
         device_status: value.device_status,
         timestamp: value.timestamp,
+        // 펌웨어는 neck_pitch(하측) / ear_pitch(상측) 이름으로 보낸다. 서버가 그대로 넘겨줘도 읽을 수 있게 둘 다 받는다.
+        lower_pitch: readOptionalNumber(value.lower_pitch, value.neck_pitch),
+        upper_pitch: readOptionalNumber(value.upper_pitch, value.ear_pitch),
       }
     }
 
@@ -117,32 +157,61 @@ function parseRealtimeMessage(raw: string): PostureMessage | AlertMessage | Devi
   return null
 }
 
-function createMockPosture(tick: number): PostureMessage {
-  const statuses: BackendPostureStatus[] = ['GOOD', 'WARNING', 'BAD', 'GOOD']
-  const configuredStatus = MOCK_STATUS === 'UNCALIBRATED' && mockCalibrated ? 'GOOD' : MOCK_STATUS
-  const status = !mockCalibrated ? 'UNCALIBRATED' : configuredStatus || statuses[Math.floor(tick / 8) % statuses.length]
-  const values: Record<BackendPostureStatus, { current: number; deviation: number | null }> = {
-    GOOD: { current: 8.4, deviation: 3.4 },
-    WARNING: { current: 18.2, deviation: 13.2 },
-    BAD: { current: 27.5, deviation: 22.5 },
-    UNCALIBRATED: { current: 7.1, deviation: null },
-  }
+const MOCK_BASELINE_DELTA = 5
 
-  return {
-    type: 'posture',
-    device_id: POSTURE_DEVICE_ID,
-    status,
-    current_delta: values[status].current,
-    baseline_delta: status === 'UNCALIBRATED' ? null : 5,
-    deviation: values[status].deviation,
-    device_status: 'connected',
-    timestamp: new Date().toISOString(),
+/** 히스테리시스 판정: 진입 기준과 해제 기준을 다르게 둔다. */
+export function classifyDeviation(deviation: number, previous: BackendPostureStatus): Exclude<BackendPostureStatus, 'UNCALIBRATED'> {
+  const t = POSTURE_THRESHOLDS
+  if (previous === 'BAD') {
+    if (deviation >= t.badExit) return 'BAD'
+    return deviation >= t.warningExit ? 'WARNING' : 'GOOD'
   }
+  if (previous === 'WARNING') {
+    if (deviation >= t.badEnter) return 'BAD'
+    return deviation >= t.warningExit ? 'WARNING' : 'GOOD'
+  }
+  if (deviation >= t.badEnter) return 'BAD'
+  return deviation >= t.warningEnter ? 'WARNING' : 'GOOD'
+}
+
+/** 시간(초)에 따른 mock 편차 시나리오. 바른 자세 → 서서히 숙임 → 거북목 유지 → 경계에서 머뭇 → 회복 */
+const mockDeviationScript: Array<{ until: number; from: number; to: number }> = [
+  { until: 12, from: 2, to: 3 },
+  { until: 18, from: 3, to: 13 },
+  { until: 32, from: 13, to: 14 },
+  { until: 38, from: 14, to: 24 },
+  { until: 56, from: 24, to: 23 },
+  { until: 60, from: 23, to: 9 },
+  { until: 66, from: 9, to: 9 },
+  { until: 70, from: 9, to: 3 },
+]
+const MOCK_SCRIPT_LENGTH = mockDeviationScript[mockDeviationScript.length - 1].until
+
+function mockDeviationAt(tick: number) {
+  const t = tick % MOCK_SCRIPT_LENGTH
+  let segmentStart = 0
+  for (const segment of mockDeviationScript) {
+    if (t < segment.until) {
+      const ratio = (t - segmentStart) / (segment.until - segmentStart)
+      return segment.from + (segment.to - segment.from) * ratio
+    }
+    segmentStart = segment.until
+  }
+  return mockDeviationScript[0].from
+}
+
+const fixedMockDeviation: Record<Exclude<BackendPostureStatus, 'UNCALIBRATED'>, number> = {
+  GOOD: 3.4,
+  WARNING: 13.2,
+  BAD: 22.5,
 }
 
 function subscribeToMock(handlers: PostureSubscription): () => void {
   let tick = 0
-  let previousStatus: BackendPostureStatus = 'GOOD'
+  let status: BackendPostureStatus = 'GOOD'
+  let outOfRangeSeconds = 0
+  let lastAlertTick = -Infinity
+  let alertedStatus: BackendPostureStatus = 'GOOD'
   let intervalId: number | undefined
 
   handlers.onConnectionChange('connecting')
@@ -158,22 +227,71 @@ function subscribeToMock(handlers: PostureSubscription): () => void {
   }, 250)
 
   const pushPosture = () => {
-    const message = createMockPosture(tick)
-    handlers.onPosture(message)
+    const timestamp = new Date().toISOString()
+    // 몸통이 앞뒤로 흔들려도(의자 젖힘 등) 목 각도(delta)에는 영향이 없다는 걸 보여주기 위한 값
+    const lowerPitch = 4 * Math.sin(tick / 9) + (Math.random() - 0.5) * 0.6
+    const noise = (Math.random() - 0.5) * 0.8
 
-    if (message.status === 'BAD' && previousStatus !== 'BAD') {
-      handlers.onAlert({
-        type: 'alert',
+    if (!mockCalibrated) {
+      const currentDelta = 7.1 + noise
+      handlers.onPosture({
+        type: 'posture',
         device_id: POSTURE_DEVICE_ID,
-        status: 'BAD',
-        prev_status: previousStatus,
-        deviation: message.deviation || 0,
-        message: '거북목 자세가 지속되고 있습니다',
-        timestamp: message.timestamp,
+        status: 'UNCALIBRATED',
+        current_delta: currentDelta,
+        baseline_delta: null,
+        deviation: null,
+        device_status: 'connected',
+        timestamp,
+        lower_pitch: lowerPitch,
+        upper_pitch: lowerPitch + currentDelta,
       })
+      tick += 1
+      return
     }
 
-    previousStatus = message.status
+    const fixedStatus = MOCK_STATUS && MOCK_STATUS !== 'UNCALIBRATED' ? MOCK_STATUS : null
+    const deviation = Math.max(0, (fixedStatus ? fixedMockDeviation[fixedStatus] : mockDeviationAt(tick)) + noise)
+    status = fixedStatus || classifyDeviation(deviation, status)
+    const currentDelta = MOCK_BASELINE_DELTA + deviation
+
+    handlers.onPosture({
+      type: 'posture',
+      device_id: POSTURE_DEVICE_ID,
+      status,
+      current_delta: currentDelta,
+      baseline_delta: MOCK_BASELINE_DELTA,
+      deviation,
+      device_status: 'connected',
+      timestamp,
+      lower_pitch: lowerPitch,
+      upper_pitch: lowerPitch + currentDelta,
+    })
+
+    // 지속 시간 + 재알림 간격 조건 (서버 로직 흉내)
+    if (status === 'GOOD') {
+      outOfRangeSeconds = 0
+      alertedStatus = 'GOOD'
+    } else {
+      outOfRangeSeconds += 1
+      const sustained = outOfRangeSeconds >= POSTURE_THRESHOLDS.sustainSeconds
+      const escalated = status === 'BAD' && alertedStatus !== 'BAD'
+      const cooledDown = tick - lastAlertTick >= POSTURE_THRESHOLDS.alertCooldownSeconds
+      if (sustained && (cooledDown || escalated)) {
+        handlers.onAlert({
+          type: 'alert',
+          device_id: POSTURE_DEVICE_ID,
+          status,
+          prev_status: alertedStatus,
+          deviation,
+          message: status === 'BAD' ? '10초 넘게 고개가 앞으로 나와 있어요. 턱을 당기고 모니터를 눈높이로 올려 주세요.' : '고개를 살짝 뒤로 당겨 목을 세워 주세요.',
+          timestamp,
+        })
+        lastAlertTick = tick
+        alertedStatus = status
+      }
+    }
+
     tick += 1
   }
 
@@ -234,9 +352,10 @@ function isCalibrationResult(value: unknown): value is CalibrationResult {
 
 export async function calibrateDevice(deviceId: string): Promise<CalibrationResult> {
   if (USE_MOCK) {
-    await new Promise((resolve) => window.setTimeout(resolve, 5000))
+    await new Promise((resolve) => window.setTimeout(resolve, POSTURE_THRESHOLDS.calibrationSeconds * 1000))
     mockCalibrated = true
-    return { success: true, baseline_delta: 5, sample_count: 50, std_dev: 0.8 }
+    // 10Hz × 5초 = 50개 샘플 평균
+    return { success: true, baseline_delta: MOCK_BASELINE_DELTA, sample_count: 50, std_dev: 0.8 }
   }
 
   try {
