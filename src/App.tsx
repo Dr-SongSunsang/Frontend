@@ -9,6 +9,7 @@ import {
   useParams,
 } from 'react-router-dom'
 import './App.css'
+import { POSTURE_THRESHOLDS, type BackendPostureStatus } from './api/posture'
 import { mockPostureStatisticsHistory, type PostureStatisticsSummary, type PostureStatisticsTrendUnit, type PostureTrendPoint } from './api/statistics'
 import { mockStretchingRecommendations, type StretchingRecommendation, type StretchingTargetPart } from './api/stretching'
 import turtle from './assets/turtle.png'
@@ -56,7 +57,7 @@ const postureStates: Record<PostureViewStatus, PostureState> = {
   analyzing: {
     status: 'analyzing',
     title: '자세를 분석중이에요',
-    message: '60% 완료',
+    message: '기기에서 센서 데이터를 받고 있어요.',
   },
   normal: {
     status: 'normal',
@@ -71,7 +72,7 @@ const postureStates: Record<PostureViewStatus, PostureState> = {
   uncalibrated: {
     status: 'uncalibrated',
     title: '기준 자세 설정이 필요해요',
-    message: '바른 자세로 앉은 뒤 기준을 설정해 주세요.',
+    message: '착용할 때마다 기준이 달라져요. 바른 자세로 앉아 기준을 잡아 주세요.',
   },
   calibrating: {
     status: 'calibrating',
@@ -136,6 +137,55 @@ function formatDuration(totalSeconds: number) {
 
 function formatDegrees(value: number | null | undefined) {
   return value == null ? '-' : `${value.toFixed(1)}°`
+}
+
+type DeviationLevel = 'good' | 'warning' | 'bad'
+
+const deviationLevelLabels: Record<DeviationLevel, string> = {
+  good: '정상',
+  warning: '주의',
+  bad: '위험',
+}
+
+function getDeviationLevel(status: BackendPostureStatus | undefined): DeviationLevel {
+  if (status === 'BAD') return 'bad'
+  if (status === 'WARNING') return 'warning'
+  return 'good'
+}
+
+/** 기준 대비 편차를 정상(<10°) · 주의(10~20°) · 위험(≥20°) 구간 위에 표시한다. */
+function DeviationGauge({ deviation, level }: { deviation: number; level: DeviationLevel }) {
+  const max = POSTURE_THRESHOLDS.gaugeMax
+  const toPercent = (value: number) => `${(Math.min(Math.max(value, 0), max) / max) * 100}%`
+
+  return (
+    <div className={`deviation-gauge deviation-gauge--${level}`}>
+      <div className="deviation-gauge__header">
+        <span>기준 대비 편차</span>
+        <strong>{formatDegrees(deviation)} <em>{deviationLevelLabels[level]}</em></strong>
+      </div>
+      <div
+        className="deviation-gauge__track"
+        role="meter"
+        aria-label="기준 대비 편차"
+        aria-valuemin={0}
+        aria-valuemax={max}
+        aria-valuenow={Math.min(max, Math.max(0, Number(deviation.toFixed(1))))}
+        aria-valuetext={`${deviation.toFixed(1)}도, ${deviationLevelLabels[level]}`}
+      >
+        <span className="deviation-gauge__zone deviation-gauge__zone--good" style={{ width: toPercent(POSTURE_THRESHOLDS.warningEnter) }} />
+        <span className="deviation-gauge__zone deviation-gauge__zone--warning" style={{ width: toPercent(POSTURE_THRESHOLDS.badEnter - POSTURE_THRESHOLDS.warningEnter) }} />
+        <span className="deviation-gauge__zone deviation-gauge__zone--bad" />
+        <i style={{ left: toPercent(deviation) }} aria-hidden="true" />
+      </div>
+      <div className="deviation-gauge__scale" aria-hidden="true">
+        <span style={{ left: '0%' }}>0°</span>
+        <span style={{ left: toPercent(POSTURE_THRESHOLDS.warningEnter) }}>{POSTURE_THRESHOLDS.warningEnter}°</span>
+        <span style={{ left: toPercent(POSTURE_THRESHOLDS.badEnter) }}>{POSTURE_THRESHOLDS.badEnter}°</span>
+        <span style={{ left: '100%' }}>{max}°+</span>
+      </div>
+    </div>
+  )
 }
 
 function Splash({ onEnter }: { onEnter: () => void }) {
@@ -249,10 +299,15 @@ function PosturePage() {
   const postureState = postureStates[status]
   const isBad = status === 'needsCorrection' && measurement?.status === 'BAD'
   const isMeasuring = status === 'normal' || status === 'needsCorrection'
-  const statusTitle = isBad ? '위험한 자세가 지속되고 있어요' : postureState.title
+  const deviationLevel = getDeviationLevel(measurement?.status)
+  const statusTitle = status === 'needsCorrection'
+    ? isBad ? '거북목 자세가 지속되고 있어요' : '고개가 조금 앞으로 나왔어요'
+    : postureState.title
+  const correctionMessage = isBad ? '턱을 당기고 모니터를 눈높이로 올려 주세요.' : postureState.message
   const statusMessage = status === 'calibrating'
     ? `${calibration.secondsRemaining}초 동안 바른 자세로 가만히 있어 주세요.`
-    : status === 'needsCorrection' && alertMessage ? alertMessage : postureState.message
+    : status === 'needsCorrection' ? alertMessage || correctionMessage : postureState.message
+  const hasSensorPitch = typeof measurement?.lower_pitch === 'number' && typeof measurement?.upper_pitch === 'number'
 
   return (
     <main className={`feature-main posture-main posture-main--${postureState.status}${isBad ? ' posture-main--bad' : ''}`}>
@@ -279,18 +334,26 @@ function PosturePage() {
               <span>{status === 'normal' ? '자세 유지 시간' : '교정 필요 시간'}</span>
               <strong>{formatDuration(durationSeconds)}</strong>
             </div>
+            {measurement.deviation != null && (
+              <DeviationGauge deviation={measurement.deviation} level={deviationLevel} />
+            )}
             <div>
-              <span>현재 기울기</span>
+              <span>현재 목 각도</span>
               <strong>{formatDegrees(measurement.current_delta)}</strong>
             </div>
             <div>
-              <span>기준 기울기</span>
+              <span>기준 목 각도</span>
               <strong>{formatDegrees(measurement.baseline_delta)}</strong>
             </div>
             <div>
-              <span>기준 편차</span>
-              <strong>{formatDegrees(measurement.deviation)}</strong>
+              <span>상태</span>
+              <strong>{deviationLevelLabels[deviationLevel]}</strong>
             </div>
+            {hasSensorPitch && (
+              <p className="posture-sensor-detail">
+                머리 쪽 센서 {formatDegrees(measurement.upper_pitch)} − 몸통 쪽 센서 {formatDegrees(measurement.lower_pitch)}
+              </p>
+            )}
             <p className="posture-device-status">
               <span aria-hidden="true" />
               {measurement.device_id} · 연결됨
@@ -301,6 +364,9 @@ function PosturePage() {
         {status === 'uncalibrated' && (
           <div className="posture-calibration">
             {calibration.error && <p role="alert">{calibration.error}</p>}
+            <p className="posture-calibration__hint">
+              {POSTURE_THRESHOLDS.calibrationSeconds}초 동안 측정한 평균 목 각도가 오늘의 기준이 돼요.
+            </p>
             <button className="action-button" type="button" onClick={startCalibration}>
               <Icon name="camera" />
               {calibration.phase === 'failed' ? '기준 자세 다시 설정' : '기준 자세 설정'}
